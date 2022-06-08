@@ -1,0 +1,11 @@
+! get category id url:
+https://www.neonet.pl/graphql
+?query=query resolveUrl($urlKey: String!, $search: String) {
+    urlResolver(url: $urlKey, search: $search) {
+        type id canonical_url meta_title meta_keywords meta_description category_description has_filter_seo header_title googlebot robots restore_params faq path_to_category industry brand_plan manufacturer_name blog_category_names is_preview
+    }
+}
+&variables={"urlKey":"/komputery/monitory.html","search":""}&v=2.125.0
+
+https://www.neonet.pl/graphql?query=query+resolveUrl%28%24urlKey%3A+String%21%2C+%24search%3A+String%29+%7B+urlResolver%28url%3A+%24urlKey%2C+search%3A+%24search%29+%7B+type+id+canonical_url+%7D%7D&variables=%7B%27urlKey%27%3A+%27%2Fkomputery%2Fmonitory.html%27%2C+%27search%27%3A+%27%27%7D
+                                                                                                                                                                                                                %7B%22urlKey%22:%22/komputery/monitory.html%22,%22search%22:%22%22%7D
