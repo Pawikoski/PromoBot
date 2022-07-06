@@ -92,13 +92,16 @@ def check_product(name, url, price, availability, products_in_db: dict, store: s
                         print("NO NAME!!!", name, store, category)
                         clean_name = name
 
-                    # TODO: endpoint - search-best-price
                     response = requests.get(f'http://127.0.0.1:8000/promobot/products/', json={
                         "product_name": clean_name,
                         "category_name": category
                     })
 
-                    lowest_price_all_stores = float(response.json()['lowest_price'])
+                    try:
+                        lowest_price_all_stores = float(response.json()['lowest_price'])
+                    except TypeError:
+                        lowest_price_all_stores = None
+
                     if lowest_price_all_stores and price <= lowest_price_all_stores:
                         print("LOG: CENEO CHECKin")
                         lowest_from_ceneo = search_ceneo(name)
