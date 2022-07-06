@@ -55,7 +55,11 @@ def collect_data():
     for store in stores:
         # if store['name'] != "Neonet":
         #     continue
-        categories = requests.get(API_URL + f'categories/{store["id"]}').json()
+        try:
+            categories = requests.get(API_URL + f'categories/{store["id"]}').json()
+        except TypeError:
+            print("You need to provide valid API key")
+            return False
         for category in categories:
             data = requests.get(API_URL + f'category-details/{store["id"]}/{category["id"]}').json()
             print("log, category, store, data")
@@ -80,6 +84,8 @@ def process_data(data):
 def main():
     while True:
         _data = collect_data()
+        if not _data:
+            break
         process_data(_data)
         print("okrążenie numero uno")
         time.sleep(3600)
