@@ -7,6 +7,7 @@ import re
 from base64 import urlsafe_b64encode
 from bs4 import BeautifulSoup
 from operations.database import add_products, check_product
+from tqdm import tqdm
 
 
 class Scraper:
@@ -486,54 +487,56 @@ class Scraper:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36"
         }
 
-        response = requests.get(self.category_url, headers=headers)
-        soup = BeautifulSoup(response.text, 'lxml')
+        soup = BeautifulSoup(requests.get(self.category_url, headers=headers).text, 'lxml')
 
         try:
             pages = int(soup.findAll("a", {"class": "paging-number"})[-1].text)
         except AttributeError:
+            pages = 1
+
+        try:
+            print(f"OleOle ({self.category_name}), page: 1")
+            products_raw = soup.find("div", {"id": "product-list"}).findAll("div", {"class": "product-for-list"})
+        except AttributeError:
+            print("log: no products oleole")
             return False
 
-        for page in range(pages):
-            new_products = []
-            pages += 1
-            print(f"OleOle ({self.category_name}), page: {page}")
+        new_products = []
 
-            url = self.category_url
-            if page > 1:
-                url = url.replace(".bhtml", f",strona-{page}.bhtml")
+        if pages > 1:
+            for page in range(2, pages + 1):
+                print(f"OleOle ({self.category_name}), page: {page}")
+                url = self.category_url.replace(".bhtml", f",strona-{page}.bhtml")
+                soup = BeautifulSoup(requests.get(url, headers=headers).text, 'lxml')
 
-            response = requests.get(url, headers=headers)
-            soup = BeautifulSoup(response.text, 'lxml')
+                products_raw.extend(
+                    soup.find("div", {"id": "product-list"}).findAll("div", {"class": "product-for-list"}))
 
-            container = soup.find("div", {"id": "product-list"})
+        for product in tqdm(products_raw, desc=f"OleOle: Analyzing ({len(products_raw)}) products"):
+            name_and_url = product.find("h2", {"class": "product-name"})
+            name = name_and_url.text.strip()
+            url = "https://oleole.pl" + name_and_url.a['href']
+            img_url = "https:" + product.find("div", {"class": "product-photo"}).find("img")['data-original']
 
-            products_raw = container.findAll("div", {"class": "product-for-list"})
-            for product in products_raw:
-                name_and_url = product.find("h2", {"class": "product-name"})
-                name = name_and_url.text.strip()
-                url = "https://oleole.pl" + name_and_url.a['href']
-                img_url = "https:" + product.find("div", {"class": "product-photo"}).find("img")['data-original']
+            if not product.find("button", {"class": "add-to-cart"}) or "disabled" in product.find("button", {
+                "class": "add-to-cart"}).attrs.keys():
+                availability = False
+                price = None
+            else:
+                availability = True
+                price_tag = product.find("div", {"class": "selenium-price-normal"})
+                price = float(
+                    str(price_tag.text).encode("ascii", "ignore").decode().strip().replace(" ", "").
+                        replace("zł","").replace("z", "").replace(",", "."))
 
-                if not product.find("button", {"class": "add-to-cart"}) or "disabled" in product.find("button", {
-                    "class": "add-to-cart"}).attrs.keys():
-                    availability = False
-                    price = None
-                else:
-                    availability = True
-                    price_tag = product.find("div", {"class": "selenium-price-normal"})
-                    price = float(
-                        str(price_tag.text).encode("ascii", "ignore").decode().strip().replace(" ", "").
-                            replace("zł","").replace("z", "").replace(",", "."))
+            result = check_product(name, url, price, availability, self.products_in_db, "OleOle", self.category_name)
+            if 'new' in result.keys():
+                r = result['new']
+                r['img'] = img_url
+                new_products.append(r)
 
-                result = check_product(name, url, price, availability, self.products_in_db, "OleOle", self.category_name)
-                if 'new' in result.keys():
-                    r = result['new']
-                    r['img'] = img_url
-                    new_products.append(r)
+        if new_products:
+            add_products(
+                {"store_name": self.store, "store_category": self.category_name, "products": new_products})
 
-            if new_products:
-                add_products(
-                    {"store_name": self.store, "store_category": self.category_name, "products": new_products})
-
-            time.sleep(random.uniform(0.2, 5.0))
+        time.sleep(random.uniform(0.2, 5.0))

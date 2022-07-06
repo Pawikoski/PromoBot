@@ -2,7 +2,7 @@ import os
 
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
-from requests_html import HTMLSession
+# from requests_html import HTMLSession
 import requests
 from bs4 import BeautifulSoup
 import time
@@ -16,71 +16,71 @@ headers = {
 }
 
 
-def mediaexpert():
-    def get_soup(page_number: int = 1):
-        s = None
-        while not s:
-            try:
-                cat_url = "https://www.mediaexpert.pl/komputery-i-tablety/laptopy-i-ultrabooki/laptopy"
-                session = HTMLSession()
-                headers = {'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"}
-
-                payload = {"limit": 70, "page": page_number}
-                response = session.get(url=cat_url, headers=headers, params=payload)
-                response.html.render(sleep=10)
-                print(response)
-                s = BeautifulSoup(response.html.raw_html, 'lxml')
-                [x.extract() for x in s.findAll("script")]
-
-                if not s:
-                    time.sleep(3)
-                    raise AttributeError
-                else:
-                    return s
-            except (requests.exceptions.ReadTimeout, AttributeError):
-                time.sleep(random.randint(3, 12))
-                response = response.html.render()
-                get_soup(page_number)
-
-    soup = get_soup()
-
-    try:
-        pages_tag = soup.find("div", {"class": "pagination"}).find("span", {"class": "from"})
-        pages_tag.small.decompose()
-        pages = int(pages_tag.text)
-    except AttributeError:
-        pages = 1
-    except ValueError:
-        print("asdfasd")
-        return False
-
-    for page in range(pages):
-        new_products = []
-        update_products = []
-        page += 1
-        print(f"Mediaexpert (test), page: {page}")
-
-        soup = get_soup(page)
-
-        products_raw = soup.findAll("div", {"class": "offer-box"})
-
-        for product in products_raw:
-            name_and_url = product.find("h2", {"class": "name"}).a
-            name = name_and_url.text.strip()
-            url = "https://mediaexpert.pl" + name_and_url['href']
-            img_url = None
-
-            availability = True
-            if not product.find("button", {"class": "add-to-cart"}):
-                availability = False
-                price = None
-            else:
-                price_tag = product.find("div", {"class": "main-price"})
-                whole = price_tag.find("span", {"class": "whole"}).text
-                rest = price_tag.find("div", {"class": "rest"}).find("span", {"class": "cents"}).text.replace(" ", "")
-                price = float(f"{whole}.{rest}".encode("ascii", "ignore"))
-
-            print(name, price, availability, url)
+# def mediaexpert():
+#     def get_soup(page_number: int = 1):
+#         s = None
+#         while not s:
+#             try:
+#                 cat_url = "https://www.mediaexpert.pl/komputery-i-tablety/laptopy-i-ultrabooki/laptopy"
+#                 session = HTMLSession()
+#                 headers = {'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"}
+#
+#                 payload = {"limit": 70, "page": page_number}
+#                 response = session.get(url=cat_url, headers=headers, params=payload)
+#                 response.html.render(sleep=10)
+#                 print(response)
+#                 s = BeautifulSoup(response.html.raw_html, 'lxml')
+#                 [x.extract() for x in s.findAll("script")]
+#
+#                 if not s:
+#                     time.sleep(3)
+#                     raise AttributeError
+#                 else:
+#                     return s
+#             except (requests.exceptions.ReadTimeout, AttributeError):
+#                 time.sleep(random.randint(3, 12))
+#                 response = response.html.render()
+#                 get_soup(page_number)
+#
+#     soup = get_soup()
+#
+#     try:
+#         pages_tag = soup.find("div", {"class": "pagination"}).find("span", {"class": "from"})
+#         pages_tag.small.decompose()
+#         pages = int(pages_tag.text)
+#     except AttributeError:
+#         pages = 1
+#     except ValueError:
+#         print("asdfasd")
+#         return False
+#
+#     for page in range(pages):
+#         new_products = []
+#         update_products = []
+#         page += 1
+#         print(f"Mediaexpert (test), page: {page}")
+#
+#         soup = get_soup(page)
+#
+#         products_raw = soup.findAll("div", {"class": "offer-box"})
+#
+#         for product in products_raw:
+#             name_and_url = product.find("h2", {"class": "name"}).a
+#             name = name_and_url.text.strip()
+#             url = "https://mediaexpert.pl" + name_and_url['href']
+#             img_url = None
+#
+#             availability = True
+#             if not product.find("button", {"class": "add-to-cart"}):
+#                 availability = False
+#                 price = None
+#             else:
+#                 price_tag = product.find("div", {"class": "main-price"})
+#                 whole = price_tag.find("span", {"class": "whole"}).text
+#                 rest = price_tag.find("div", {"class": "rest"}).find("span", {"class": "cents"}).text.replace(" ", "")
+#                 price = float(f"{whole}.{rest}".encode("ascii", "ignore"))
+#
+#             print(name, price, availability, url)
 
 
 # TODO: Repair
@@ -277,5 +277,47 @@ def whitemarket():
     pass
 
 
+def oleole():
+    category_url = "https://www.oleole.pl/laptopy-i-netbooki.bhtml"
+    category_name = "Laptopy i netbooki"
+    soup = BeautifulSoup(requests.get(category_url, headers=headers).text, 'lxml')
+
+    try:
+        pages = int(soup.findAll("a", {"class": "paging-number"})[-1].text)
+    except AttributeError:
+        pages = 1
+
+    try:
+        products_raw = soup.find("div", {"id": "product-list"}).findAll("div", {"class": "product-for-list"})
+    except AttributeError:
+        print("log: no products oleole")
+        return False
+
+    if pages > 1:
+        for page in range(2, pages + 1):
+            print(f"OleOle ({category_name}), page: {page}")
+            url = category_url.replace(".bhtml", f",strona-{page}.bhtml")
+            soup = BeautifulSoup(requests.get(url, headers=headers).text, 'lxml')
+
+            products_raw.extend(soup.find("div", {"id": "product-list"}).findAll("div", {"class": "product-for-list"}))
+
+    for product in products_raw:
+        name_and_url = product.find("h2", {"class": "product-name"})
+        name = name_and_url.text.strip()
+        url = "https://oleole.pl" + name_and_url.a['href']
+        img_url = "https:" + product.find("div", {"class": "product-photo"}).find("img")['data-original']
+
+        if not product.find("button", {"class": "add-to-cart"}) or "disabled" in product.find("button", {
+            "class": "add-to-cart"}).attrs.keys():
+            availability = False
+            price = None
+        else:
+            availability = True
+            price_tag = product.find("div", {"class": "selenium-price-normal"})
+            price = float(
+                str(price_tag.text).encode("ascii", "ignore").decode().strip().replace(" ", "").
+                    replace("zł", "").replace("z", "").replace(",", "."))
+
+
 if __name__ == "__main__":
-    mediaexpert()
+    oleole()
