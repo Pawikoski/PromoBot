@@ -1,10 +1,20 @@
+import os
 import requests
 from .product import clear_product_name
 from .ceneo import search_ceneo
 
 
+API_KEY = os.environ.get("API_KEY")
+
+api_headers = {
+    "Authorization": f"Token {API_KEY}"
+}
+
+
 def add_products(data):
-    requests.post('http://127.0.0.1:8000/promobot/products/', json=data)
+    r = requests.post('http://127.0.0.1:8000/promobot/products/', json=data)
+    if r.status_code == 500:
+        print(r.text)
     print(f"{data['store_name']}, {len(data['products'])} new products ({data['store_category']})")
 
 
@@ -83,13 +93,13 @@ def check_product(name, url, price, availability, products_in_db: dict, store: s
                         clean_name = name
 
                     # TODO: endpoint - search-best-price
-                    response = requests.get(f'', json={
+                    response = requests.get(f'http://127.0.0.1:8000/promobot/products/', json={
                         "product_name": clean_name,
                         "category_name": category
                     })
 
                     lowest_price_all_stores = float(response.json()['lowest_price'])
-                    if price <= lowest_price_all_stores:
+                    if lowest_price_all_stores and price <= lowest_price_all_stores:
                         print("LOG: CENEO CHECKin")
                         lowest_from_ceneo = search_ceneo(name)
                         if lowest_from_ceneo and price < lowest_from_ceneo \
