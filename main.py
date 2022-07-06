@@ -10,7 +10,12 @@ import concurrent.futures
 import os
 
 
-API_URL = os.environ.get('API_URL')
+API_URL = "http://127.0.0.1:8000/promobot/"
+API_KEY = os.environ.get("API_KEY")
+
+api_headers = {
+    "Authorization": f"Token {API_KEY}"
+}
 
 
 def work_on_products(store, category_name, category_url, products):
@@ -19,22 +24,22 @@ def work_on_products(store, category_name, category_url, products):
         scraper = Scraper(store=store, category_name=category_name, category_url=category_url, products=products)
 
         match store:
-            case "RTV Euro AGD":
-                scraper.rtveuroagd()
-            case "Media Expert":
-                scraper.mediaexpert()
-            case "Neonet":
-                scraper.neonet()
-            case "Avans":
-                scraper.avans()
-            case "x-kom":
-                scraper.x_kom()
-            # case "Komputronik":
+            # case "RTV Euro AGD":
+            #     scraper.rtveuroagd()
+            # case "Media Expert": TODO:
+            #     scraper.mediaexpert()
+            # case "Neonet":
+            #     scraper.neonet()
+            # case "Avans": TODO:
+            #     scraper.avans()
+            # case "x-kom":
+            #     scraper.x_kom()
+            # case "Komputronik": TODO:
             #     scraper.komputronik()
-            case "Morele":
-                scraper.morele()
-            case "Sferis":
-                scraper.sferis()
+            # case "Morele": # TODO: sometimes already existing url
+            #     scraper.morele()
+            # case "Sferis":# TODO: sometimes already existing url
+            #     scraper.sferis()
             case "OleOle":
                 scraper.oleole()
 
@@ -46,11 +51,13 @@ def work_on_products(store, category_name, category_url, products):
 def collect_data():
     print("log: starting. collecting data")
     collected_data = []
-    stores = requests.get(API_URL + 'get-stores').json()['stores']
+    stores = requests.get(API_URL + 'stores', headers=api_headers).json()
     for store in stores:
-        categories = requests.get(API_URL + f'get-categories/{store[0]}').json()['categories']
+        # if store['name'] != "Neonet":
+        #     continue
+        categories = requests.get(API_URL + f'categories/{store["id"]}').json()
         for category in categories:
-            data = requests.get(API_URL + f'get-category-url-and-products/{store[0]}/{category[0]}').json()
+            data = requests.get(API_URL + f'category-details/{store["id"]}/{category["id"]}').json()
             print("log, category, store, data")
             collected_data.append((store, category, data))
 
@@ -59,15 +66,15 @@ def collect_data():
 
 
 def process_data(data):
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
         for record in data:
-            store = record[0][1]
-            category_name = record[1][1]
-            category_url = record[2]["url"]
-            products = record[2]['products'][store]
+            store = record[0]['name']
+            category_name = record[1]["name"]
+            category_url = record[2]["category_url"]
+            products = record[2]['products']
 
             executor.submit(work_on_products, store, category_name, category_url, products)
-            time.sleep(random.uniform(0.5, 3.0))
+            # time.sleep(random.uniform(0.5, 3.0))
 
 
 def main():
