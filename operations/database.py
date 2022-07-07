@@ -47,7 +47,7 @@ def add_product_to_promo(product_url: str, store: str, category: str, certain: b
         "certain": certain
     }
 
-    response = requests.post(f'http://127.0.0.1:8000/add-product-to-promo/', json=data)
+    response = requests.post(f'http://127.0.0.1:8000/promobot/add-product-to-promo/', json=data)
     if response.status_code == 200:
         return True
     return False
