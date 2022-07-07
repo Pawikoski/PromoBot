@@ -388,47 +388,27 @@ class Scraper:
             time.sleep(random.uniform(0.2, 5.0))
 
     def morele(self):
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36"
-        }
-
-        response = requests.get(self.category_url, headers=headers)
-        soup = BeautifulSoup(response.text, 'lxml')
-
-        try:
-            pages = int(soup.find("input", {"type": "number", "data-pagination-href": True})["data-max-page"])
-        except TypeError:
-            pages = int(soup.findAll("div", {"data-page": True})[-1]['data-page'])
-
-        for page in range(pages):
+        def analyze_products(raw_data):
             new_products = []
-            page += 1
-            print(f"Morele ({self.category_name}), page: {page}")
-
-            url = self.category_url + f",,,,,,,,0,,,,/{page}/"
-            response = requests.get(url, headers=headers)
-            soup = BeautifulSoup(response.text, 'lxml')
-
-            container = soup.find("div", {"class": "cat-list-products"})
-            products_raw = soup.findAll("div", {"class": "cat-product"})
-
-            for product in products_raw:
+            for product in tqdm(raw_data, desc=f"Morele: Analyzing {len(raw_data)} products"):
                 name = product['data-product-name']
-                url = "https://morele.net" + product.find("a", {"class": "productLink"})['href']
+                new_url = "https://morele.net" + product.find("a", {"class": "productLink"})['href']
                 try:
                     img_url = product.find("img", {"class": "product-image"})['src']
                 except KeyError:
                     img_url = product.find("img", {"class": "product-image"})['data-src']
                 except TypeError:
                     img_url = None
-                availability = True
+
                 if not product.find("a", href=re.compile(fr"/basket/add/{product['data-product-id']}")):
                     availability = False
                     price = None
                 else:
-                    price = float(product['data-product-price'])
+                    availability = True
+                    price = float(product['data-product-price'])  # todo: catch AttributeError exceptions
 
-                result = check_product(name, url, price, availability, self.products_in_db, "Morele", self.category_name)
+                result = check_product(name, new_url, price, availability, self.products_in_db, "Morele",
+                                       self.category_name)
                 if 'new' in result.keys():
                     r = result['new']
                     r['img'] = img_url
@@ -437,9 +417,64 @@ class Scraper:
             if new_products:
                 add_products({"store_name": self.store, "store_category": self.category_name, "products": new_products})
 
-            time.sleep(random.uniform(0.2, 5.0))
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36"
+        }
+
+        soup = BeautifulSoup(requests.get(self.category_url, headers=headers).text, 'lxml')
+
+        try:
+            pages = int(soup.find("input", {"type": "number", "data-pagination-href": True})["data-max-page"])
+        except TypeError:
+            pages = int(soup.findAll("div", {"data-page": True})[-1]['data-page'])
+        except AttributeError:
+            pages = 1
+
+        try:
+            print(f"Morele ({self.category_name}), page: 1")
+            products_raw = soup.find_all("div", {"class": "cat-product"})
+            analyze_products(products_raw)
+        except AttributeError:
+            print("log: no products morele")
+            return False
+
+        if pages > 1:
+            for page in range(2, pages + 1):
+                print(f"Morele ({self.category_name}), page: {page}")
+                url = self.category_url + f",,,,,,,,0,,,,/{page}/"
+                soup = BeautifulSoup(requests.get(url, headers=headers).text, 'lxml')
+                products_raw = soup.findAll("div", {"class": "cat-product"})
+                analyze_products(products_raw)
+                time.sleep(random.uniform(0.2, 5.0))
 
     def sferis(self):
+        def analyze_products(raw_data):
+            new_products = []
+            for product in tqdm(raw_data, desc=f"Sferis: Analyzing {len(raw_data)} products"):
+                name = product.find("p", {"class": "title"}).text
+                url = "https://sferis.pl" + product.a['href']
+                img_url = "https://sferis.pl" + product.find("picture").find("source", {"type": "image/jpeg"})['srcset']
+
+                if not product.find("button", {"title": "Dodaj do koszyka"}):
+                    availability = False
+                    price = None
+                else:
+                    availability = True
+                    price = float(
+                        product.find("span", {"class": "price"}).text.replace(",", ".").replace("zł", "").replace(" ",
+                                                                                                                  "")
+                    )
+
+                result = check_product(name, url, price, availability, self.products_in_db, "Sferis",
+                                       self.category_name)
+                if 'new' in result.keys():
+                    r = result['new']
+                    r['img'] = img_url
+                    new_products.append(r)
+
+            if new_products:
+                add_products({"store_name": self.store, "store_category": self.category_name, "products": new_products})
+
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36"
         }
@@ -452,7 +487,9 @@ class Scraper:
 
         try:
             print(f"Sferis ({self.category_name}), page: 1")
-            products_raw = soup.find("article", {"id": "jsProductListingItems"}).find_all("div", {"class": "jsSwipe"})
+            analyze_products(
+                soup.find("article", {"id": "jsProductListingItems"}).find_all("div", {"class": "jsSwipe"})
+            )
         except AttributeError:
             print("log: no products sferis")
             return False
@@ -463,36 +500,42 @@ class Scraper:
                 soup = BeautifulSoup(
                     requests.get(self.category_url, params={"l": 150, "p": page}, headers=headers).text, 'lxml'
                 )
-                products_raw.extend(
+                analyze_products(
                     soup.find("article", {"id": "jsProductListingItems"}).find_all("div", {"class": "jsSwipe"})
                 )
                 time.sleep(random.uniform(0.2, 5.0))
 
-        new_products = []
-        for product in tqdm(products_raw, desc=f"Sferis: Analyzing ({len(products_raw)}) products"):
-            name = product.find("p", {"class": "title"}).text
-            url = "https://sferis.pl" + product.a['href']
-            img_url = "https://sferis.pl" + product.find("picture").find("source", {"type": "image/jpeg"})['srcset']
-
-            if not product.find("button", {"title": "Dodaj do koszyka"}):
-                availability = False
-                price = None
-            else:
-                availability = True
-                price = float(
-                    product.find("span", {"class": "price"}).text.replace(",", ".").replace("zł", "").replace(" ", "")
-                )
-
-            result = check_product(name, url, price, availability, self.products_in_db, "Sferis", self.category_name)
-            if 'new' in result.keys():
-                r = result['new']
-                r['img'] = img_url
-                new_products.append(r)
-
-        if new_products:
-            add_products({"store_name": self.store, "store_category": self.category_name, "products": new_products})
-
     def oleole(self):
+        def analyze_products(raw_data):
+            new_products = []
+            for product in tqdm(raw_data, desc=f"OleOle: Analyzing {len(raw_data)} products"):
+                name_and_url = product.find("h2", {"class": "product-name"})
+                name = name_and_url.text.strip()
+                url = "https://oleole.pl" + name_and_url.a['href']
+                img_url = "https:" + product.find("div", {"class": "product-photo"}).find("img")['data-original']
+
+                if not product.find("button", {"class": "add-to-cart"}) or "disabled" in product.find("button", {
+                    "class": "add-to-cart"}).attrs.keys():
+                    availability = False
+                    price = None
+                else:
+                    availability = True
+                    price_tag = product.find("div", {"class": "selenium-price-normal"})
+                    price = float(
+                        str(price_tag.text).encode("ascii", "ignore").decode().strip().replace(" ", "").
+                            replace("zł", "").replace("z", "").replace(",", "."))
+
+                result = check_product(name, url, price, availability, self.products_in_db, "OleOle",
+                                       self.category_name)
+                if 'new' in result.keys():
+                    r = result['new']
+                    r['img'] = img_url
+                    new_products.append(r)
+
+            if new_products:
+                add_products(
+                    {"store_name": self.store, "store_category": self.category_name, "products": new_products})
+
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36"
         }
@@ -506,7 +549,9 @@ class Scraper:
 
         try:
             print(f"OleOle ({self.category_name}), page: 1")
-            products_raw = soup.find("div", {"id": "product-list"}).findAll("div", {"class": "product-for-list"})
+            analyze_products(
+                soup.find("div", {"id": "product-list"}).findAll("div", {"class": "product-for-list"})
+            )
         except AttributeError:
             print("log: no products oleole")
             return False
@@ -517,37 +562,10 @@ class Scraper:
                 url = self.category_url.replace(".bhtml", f",strona-{page}.bhtml")
                 soup = BeautifulSoup(requests.get(url, headers=headers).text, 'lxml')
 
-                products_raw.extend(
+                analyze_products(
                     soup.find("div", {"id": "product-list"}).findAll("div", {"class": "product-for-list"})
                 )
                 time.sleep(random.uniform(0.2, 5.0))
 
-        new_products = []
-        for product in tqdm(products_raw, desc=f"OleOle: Analyzing ({len(products_raw)}) products"):
-            name_and_url = product.find("h2", {"class": "product-name"})
-            name = name_and_url.text.strip()
-            url = "https://oleole.pl" + name_and_url.a['href']
-            img_url = "https:" + product.find("div", {"class": "product-photo"}).find("img")['data-original']
-
-            if not product.find("button", {"class": "add-to-cart"}) or "disabled" in product.find("button", {
-                "class": "add-to-cart"}).attrs.keys():
-                availability = False
-                price = None
-            else:
-                availability = True
-                price_tag = product.find("div", {"class": "selenium-price-normal"})
-                price = float(
-                    str(price_tag.text).encode("ascii", "ignore").decode().strip().replace(" ", "").
-                        replace("zł","").replace("z", "").replace(",", "."))
-
-            result = check_product(name, url, price, availability, self.products_in_db, "OleOle", self.category_name)
-            if 'new' in result.keys():
-                r = result['new']
-                r['img'] = img_url
-                new_products.append(r)
-
-        if new_products:
-            add_products(
-                {"store_name": self.store, "store_category": self.category_name, "products": new_products})
 
 
