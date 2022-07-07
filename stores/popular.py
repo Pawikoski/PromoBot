@@ -443,44 +443,54 @@ class Scraper:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36"
         }
-        response = requests.get(self.category_url, headers=headers, params={"l": 150})
-        soup = BeautifulSoup(response.text, 'lxml')
+        soup = BeautifulSoup(requests.get(self.category_url, headers=headers, params={"l": 150}).text, 'lxml')
 
-        pages = int(soup.find("span", {"data-pages": True})['data-pages'])
+        try:
+            pages = int(soup.find("span", {"data-pages": True})['data-pages'])
+        except (ValueError, AttributeError, TypeError):
+            pages = 1
 
-        for page in range(pages):
-            new_products = []
-            page += 1
-            print(f"Sferis ({self.category_name}), page: {page}")
+        try:
+            print(f"Sferis ({self.category_name}), page: 1")
+            products_raw = soup.find("article", {"id": "jsProductListingItems"}).find_all("div", {"class": "jsSwipe"})
+        except AttributeError:
+            print("log: no products sferis")
+            return False
 
-            response = requests.get(self.category_url, params={"l": 150, "p": page},
-                                    headers=headers)
-            soup = BeautifulSoup(response.text, 'lxml')
+        if pages > 1:
+            for page in range(2, pages + 1):
+                print(f"Sferis ({self.category_name}), page: {page}")
+                soup = BeautifulSoup(
+                    requests.get(self.category_url, params={"l": 150, "p": page}, headers=headers).text, 'lxml'
+                )
+                products_raw.extend(
+                    soup.find("article", {"id": "jsProductListingItems"}).find_all("div", {"class": "jsSwipe"})
+                )
+                time.sleep(random.uniform(0.2, 5.0))
 
-            products_raw = soup.find("article", {"id": "jsProductListingItems"}).findAll("div", {"class": "jsSwipe"})
+        new_products = []
+        for product in tqdm(products_raw, desc=f"Sferis: Analyzing ({len(products_raw)}) products"):
+            name = product.find("p", {"class": "title"}).text
+            url = "https://sferis.pl" + product.a['href']
+            img_url = "https://sferis.pl" + product.find("picture").find("source", {"type": "image/jpeg"})['srcset']
 
-            for product in products_raw:
-                name = product.find("p", {"class": "title"}).text
-                url = "https://sferis.pl" + product.a['href']
-                img_url = "https://sferis.pl" + product.find("picture").find("source", {"type": "image/jpeg"})['srcset']
-
+            if not product.find("button", {"title": "Dodaj do koszyka"}):
+                availability = False
+                price = None
+            else:
                 availability = True
-                if not product.find("button", {"title": "Dodaj do koszyka"}):
-                    availability = False
-                    price = None
                 price = float(
-                    product.find("span", {"class": "price"}).text.replace(",", ".").replace("zł", "").replace(" ", ""))
+                    product.find("span", {"class": "price"}).text.replace(",", ".").replace("zł", "").replace(" ", "")
+                )
 
-                result = check_product(name, url, price, availability, self.products_in_db, "Sferis", self.category_name)
-                if 'new' in result.keys():
-                    r = result['new']
-                    r['img'] = img_url
-                    new_products.append(r)
+            result = check_product(name, url, price, availability, self.products_in_db, "Sferis", self.category_name)
+            if 'new' in result.keys():
+                r = result['new']
+                r['img'] = img_url
+                new_products.append(r)
 
-            if new_products:
-                add_products({"store_name": self.store, "store_category": self.category_name, "products": new_products})
-
-            time.sleep(random.uniform(0.2, 5.0))
+        if new_products:
+            add_products({"store_name": self.store, "store_category": self.category_name, "products": new_products})
 
     def oleole(self):
         headers = {
@@ -501,8 +511,6 @@ class Scraper:
             print("log: no products oleole")
             return False
 
-        new_products = []
-
         if pages > 1:
             for page in range(2, pages + 1):
                 print(f"OleOle ({self.category_name}), page: {page}")
@@ -510,8 +518,11 @@ class Scraper:
                 soup = BeautifulSoup(requests.get(url, headers=headers).text, 'lxml')
 
                 products_raw.extend(
-                    soup.find("div", {"id": "product-list"}).findAll("div", {"class": "product-for-list"}))
+                    soup.find("div", {"id": "product-list"}).findAll("div", {"class": "product-for-list"})
+                )
+                time.sleep(random.uniform(0.2, 5.0))
 
+        new_products = []
         for product in tqdm(products_raw, desc=f"OleOle: Analyzing ({len(products_raw)}) products"):
             name_and_url = product.find("h2", {"class": "product-name"})
             name = name_and_url.text.strip()
@@ -539,4 +550,4 @@ class Scraper:
             add_products(
                 {"store_name": self.store, "store_category": self.category_name, "products": new_products})
 
-        time.sleep(random.uniform(0.2, 5.0))
+
