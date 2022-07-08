@@ -460,7 +460,11 @@ class Scraper:
             for page in range(2, pages + 1):
                 print(f"Morele ({self.category_name}), page: {page}")
                 url = self.category_url + f",,,,,,,,0,,,,/{page}/"
-                soup = BeautifulSoup(requests.get(url, headers=headers).text, 'lxml')
+                response = requests.get(url, headers=headers)
+                if response.status_code != 200:
+                    time.sleep(20)
+                    response = requests.get(url, headers=headers)
+                soup = BeautifulSoup(response.text, 'lxml')
                 products_raw = soup.findAll("div", {"class": "cat-product"})
                 analyze_products(products_raw)
                 time.sleep(random.uniform(0.2, 5.0))
