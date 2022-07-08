@@ -397,10 +397,13 @@ class Scraper:
             for page in range(2, pages + 1):
                 print(f"Komputronik ({self.category_name}), page: {page}")
 
+                response = requests.get(self.category_url, params={"p": page}, headers=headers)
+                if response.status_code != 200:
+                    time.sleep(20)
+                    response = requests.get(self.category_url, params={"p": page}, headers=headers)
+
                 soup = BeautifulSoup(
-                    requests.get(
-                        "https://www.komputronik.pl/category/1251/monitory.html", params={"p": page}, headers=headers
-                    ).text, 'lxml'
+                    response.text, 'lxml'
                 )
                 analyze_products(soup.findAll("li", {"class": "product-entry2"}))
                 time.sleep(random.uniform(1.0, 8.0))
