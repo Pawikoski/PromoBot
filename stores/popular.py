@@ -270,44 +270,21 @@ class Scraper:
             time.sleep(random.uniform(0.2, 5.0))
 
     def x_kom(self):
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36"
-        }
-        response = requests.get(self.category_url, headers=headers)
-        soup = BeautifulSoup(response.text, 'lxml')
-
-        pagination = soup.find("input", {"type": "number", "value": "1"})
-        if not pagination:
-            return False
-
-        pages = int(pagination['max'])
-
-        for page in range(pages):
+        def analyze_products(raw_data):
             new_products = []
-            page += 1
-            print(f"x-kom ({self.category_name}), page: {page}")
-
-            params = {
-                "page": page,
-            }
-
-            response = requests.get(self.category_url, params=params, headers=headers)
-            soup = BeautifulSoup(response.text, 'lxml')
-
-            container = soup.find("div", {"id": "listing-container"})
-            products_raw = container.findAll("div", {"width": True})
-
-            for product in products_raw:
+            for product in tqdm(raw_data, desc=f"x-kom: Analyzing {len(raw_data)} products"):
                 name = product.find("h3", {"title": True}).text
                 url = "https://x-kom.pl" + product.find("a")['href']
                 img_url = product.findAll("img")[1]['src']
 
-                availability = True
                 if not product.find("button", {"title": "Dodaj do koszyka"}):
                     availability = False
                     price = None
-                price = product.findAll("span", string=re.compile(r"^[\d ]*,\d{1,2} zł"))[-1].text. \
-                    replace(" ", "").replace("zł", "").replace(",", ".")
+                else:
+                    availability = True
+                    # TODO: Catch exceptions for price
+                    price = product.findAll("span", string=re.compile(r"^[\d ]*,\d{1,2} zł"))[-1].text. \
+                        replace(" ", "").replace("zł", "").replace(",", ".")
 
                 result = check_product(name, url, price, availability, self.products_in_db, "x-kom", self.category_name)
                 if 'new' in result.keys():
@@ -318,7 +295,37 @@ class Scraper:
             if new_products:
                 add_products({"store_name": self.store, "store_category": self.category_name, "products": new_products})
 
-            time.sleep(random.uniform(0.2, 5.0))
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/101.0.4951.67 Safari/537.36 "
+        }
+        soup = BeautifulSoup(requests.get(self.category_url, headers=headers).text, 'lxml')
+
+        try:
+            pagination = soup.find("input", {"type": "number", "value": "1"})
+
+            pages = int(pagination['max'])
+        except (TypeError, AttributeError, IndexError):
+            pages = 1
+
+        try:
+            print(f"x-kom ({self.category_name}), page: 1")
+            container = soup.find("div", {"id": "listing-container"})
+            analyze_products(container.find_all(name="div", attrs={"width": True}))
+        except AttributeError:
+            print("log: no products x-kom")
+            return False
+
+        if pages > 1:
+            for page in range(2, pages + 1):
+                print(f"x-kom ({self.category_name}), page: {page}")
+                response = requests.get(self.category_url, params={"page": page}, headers=headers)
+                soup = BeautifulSoup(response.text, 'lxml')
+
+                container = soup.find("div", {"id": "listing-container"})
+                analyze_products(container.findAll("div", {"width": True}))
+
+                time.sleep(random.uniform(0.2, 5.0))
 
     def komputronik(self):
         def analyze_products(raw_data):
@@ -360,7 +367,7 @@ class Scraper:
             if new_products:
                 add_products({"store_name": self.store, "store_category": self.category_name, "products": new_products})
 
-        headers = {
+        headers = { # TODO: Richer headers
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36"
         }
 
