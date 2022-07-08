@@ -321,38 +321,11 @@ class Scraper:
             time.sleep(random.uniform(0.2, 5.0))
 
     def komputronik(self):
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36"
-        }
-
-        response = requests.get("https://www.komputronik.pl/category/1251/monitory.html", headers=headers)
-        soup = BeautifulSoup(response.text, 'lxml')
-
-        try:
-            pages = int(soup.findAll("a", href=re.compile(r'\?p=\d{1,3}'))[-3].text)
-        except ValueError:
-            return False
-
-        for page in range(pages):
+        def analyze_products(raw_data):
             new_products = []
-            page += 1
-            print(f"Komputronik ({self.category_name}), page: {page}")
-
-            params = {
-                "p": page,
-            }
-
-            response = requests.get("https://www.komputronik.pl/category/1251/monitory.html", params=params,
-                                    headers=headers)
-            soup = BeautifulSoup(response.text, 'lxml')
-
-            products_raw = soup.findAll("li", {"class": "product-entry2"})
-
-            for product in products_raw:
+            for product in tqdm(raw_data, desc=f"Komputronik: Analyzing {len(raw_data)} products"):
                 name = product.find("div", {"class": "pe2-head"}).a.text.strip()
-
                 img_and_url = product.find("a", {"class": "pe2-img"})
-
                 url = None
                 try:
                     url = img_and_url['href']
@@ -368,15 +341,17 @@ class Scraper:
                 if not url:
                     continue
 
-                availability = True
                 if product.find("ktr-product-availability")['is-buyable'] == "0":
                     price = None
                     availability = False
                 else:
+                    availability = True
+                    # TODO: Catch exceptions for price:
                     price = float(str(product.find("span", {"class": "price"}).text).encode("ascii", "ignore").decode()
                                   .strip().replace(" ", "").replace("zł", "").replace("z", "").replace(",", "."))
 
-                result = check_product(name, url, price, availability, self.products_in_db, "Komputronik", self.category_name)
+                result = check_product(name, url, price, availability, self.products_in_db, "Komputronik",
+                                       self.category_name)
                 if 'new' in result.keys():
                     r = result['new']
                     r['img'] = img_url
@@ -385,7 +360,50 @@ class Scraper:
             if new_products:
                 add_products({"store_name": self.store, "store_category": self.category_name, "products": new_products})
 
-            time.sleep(random.uniform(0.2, 5.0))
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36"
+        }
+
+        response = requests.get(self.category_url, headers=headers)
+        if response.status_code == 408:
+            print("Komputronik 408")
+            time.sleep(5)
+            response = requests.get(self.category_url, headers=headers)
+        if response.status_code != 200:
+            print("Komputronik error")
+            return False
+
+        soup = BeautifulSoup(
+            response.text, 'lxml'
+        )
+
+        try:
+            pages_raw = soup.find_all("a", href=re.compile(r'\?p=\d{1,3}'))
+            if len(pages_raw) == 2:
+                pages = 2
+            else:
+                pages = int(pages_raw[-2].text)
+        except (ValueError, AttributeError, TypeError, IndexError):
+            pages = 1
+
+        try:
+            print(f"Komputronik ({self.category_name}), page: 1")
+            analyze_products(soup.findAll("li", {"class": "product-entry2"}))
+        except AttributeError:
+            print("log: no products komputronik")
+            return False
+
+        if pages > 1:
+            for page in range(2, pages + 1):
+                print(f"Komputronik ({self.category_name}), page: {page}")
+
+                soup = BeautifulSoup(
+                    requests.get(
+                        "https://www.komputronik.pl/category/1251/monitory.html", params={"p": page}, headers=headers
+                    ).text, 'lxml'
+                )
+                analyze_products(soup.findAll("li", {"class": "product-entry2"}))
+                time.sleep(random.uniform(1.0, 8.0))
 
     def morele(self):
         def analyze_products(raw_data):
@@ -511,7 +529,7 @@ class Scraper:
             for product in tqdm(raw_data, desc=f"OleOle: Analyzing {len(raw_data)} products"):
                 name_and_url = product.find("h2", {"class": "product-name"})
                 name = name_and_url.text.strip()
-                url = "https://oleole.pl" + name_and_url.a['href']
+                product_url = "https://oleole.pl" + name_and_url.a['href']
                 img_url = "https:" + product.find("div", {"class": "product-photo"}).find("img")['data-original']
 
                 if not product.find("button", {"class": "add-to-cart"}) or "disabled" in product.find("button", {
@@ -525,7 +543,7 @@ class Scraper:
                         str(price_tag.text).encode("ascii", "ignore").decode().strip().replace(" ", "").
                             replace("zł", "").replace("z", "").replace(",", "."))
 
-                result = check_product(name, url, price, availability, self.products_in_db, "OleOle",
+                result = check_product(name, product_url, price, availability, self.products_in_db, "OleOle",
                                        self.category_name)
                 if 'new' in result.keys():
                     r = result['new']
