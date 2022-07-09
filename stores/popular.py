@@ -208,39 +208,10 @@ class Scraper:
             time.sleep(random.uniform(0.2, 5.0))
 
     def avans(self):
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36"
-        }
-        payload = {
-            "limit": 50,
-        }
-        response = requests.get(self.category_url, params=payload,
-                                headers=headers)
-        soup = BeautifulSoup(response.text, 'lxml')
-
-        try:
-            pages = int(soup.find("form", {"name": "paginate-form"}).find("span", {"class": "is-total"}).text.strip())
-        except AttributeError:
-            pages = 1
-        except ValueError:
-            return False
-
-        for page in range(pages):
+        # TODO: selenium instead of requests
+        def analyze_products(raw_data):
             new_products = []
-            page += 1
-            print(f"Avans ({self.category_name}), page: {page}")
-
-            p = {
-                "limit": 50,
-                "page": page
-            }
-
-            response = requests.get(self.category_url, params=p, headers=headers)
-            soup = BeautifulSoup(response.text, 'lxml')
-
-            container = soup.find("div", {"class": "c-grid"})
-            products_raw = container.findAll("div", {"data-zone": "OFFERBOX"})
-            for product in products_raw:
+            for product in tqdm(raw_data, desc=f"Avans: Analyzing {len(raw_data)} products"):
                 try:
                     product_data = dict(
                         json.loads(product.find("meta", {'data-analytics-item': True})['data-analytics-item']))
@@ -251,12 +222,12 @@ class Scraper:
                 url = "https://avans.pl" + product.find("div", {"data-zone": "OFFERBOX_NAME"}).find("a")['href']
                 img_url = "https://avans.pl" + product.find("div", {"data-zone": "OFFERBOX_PHOTO"}).find("img")['data-src']
 
-                availability = True
                 if not product.find("div", {"data-zone": "ADD_TO_CART_PRECART"}):
                     availability = False
                     price = None
                 else:
                     price = float(product_data['price'])
+                    availability = True
 
                 result = check_product(name, url, price, availability, self.products_in_db, "Avans", self.category_name)
                 if 'new' in result.keys():
@@ -267,7 +238,38 @@ class Scraper:
             if new_products:
                 add_products({"store_name": self.store, "store_category": self.category_name, "products": new_products})
 
-            time.sleep(random.uniform(0.2, 5.0))
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36",
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+            "content-type": "application/json"
+        }
+        payload = {
+            "limit": 50,
+        }
+        soup = BeautifulSoup(requests.get(self.category_url, params=payload,  headers=headers).text, 'lxml')
+
+        try:
+            pages = int(soup.find("form", {"name": "paginate-form"}).find("span", {"class": "is-total"}).text.strip())
+        except AttributeError:
+            pages = 1
+        except ValueError:
+            return False
+
+        try:
+            print(f"Avans ({self.category_name}), page: 1")
+            analyze_products(soup.find("div", {"class": "c-grid"}).find_all("div", {"data-zone": "OFFERBOX"}))
+        except AttributeError:
+            print("log: no products avans")
+            return False
+
+        if pages > 1:
+            for page in range(2, pages + 1):
+                print(f"Avans ({self.category_name}), page: {page}")
+                payload["page"] = page
+                soup = BeautifulSoup(requests.get(self.category_url, params=payload, headers=headers).text, 'lxml')
+                analyze_products(soup.find("div", {"class": "c-grid"}).find_all("div", {"data-zone": "OFFERBOX"}))
+
+                time.sleep(random.uniform(0.2, 5.0))
 
     def x_kom(self):
         def analyze_products(raw_data):
